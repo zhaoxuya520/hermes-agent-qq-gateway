@@ -18,6 +18,7 @@ A standalone Node.js gateway that connects QQ Official Bot to Hermes Agent throu
 - Built-in commands
 - Proactive send CLI
 - Attachment download and local cache for inbound files
+- Attachment passthrough mode so Hermes does not auto-analyze files unless asked
 - Outbound image, voice, video, and file tags for QQ C2C and group chats
 - Docker and PM2 deployment files
 
@@ -55,6 +56,8 @@ When QQ attachments are present, the gateway can download them into the local da
 ```
 
 This gives Hermes a stable local path it can refer to in tool-enabled workflows.
+
+By default, the gateway does not force Hermes to analyze attachments. Attachments are passed through as available resources, and Hermes should only inspect them when the user explicitly asks.
 
 ## Quick start
 
@@ -143,6 +146,7 @@ Runtime and storage:
 - `QQBOT_REQUEST_TIMEOUT_MS`
 - `QQBOT_DATA_DIR`
 - `QQBOT_DOWNLOAD_ATTACHMENTS`
+- `QQBOT_AUTO_ANALYZE_ATTACHMENTS`
 - `QQBOT_MAX_DOWNLOAD_BYTES`
 - `QQBOT_ALLOW_FROM`
 - `LOG_LEVEL`
@@ -169,6 +173,7 @@ pm2 start ecosystem.config.cjs
 - Rich media delivery is best on C2C and group chats. Guild channels and guild DMs fall back to plain URLs for unsupported media.
 - Attachment downloads are capped by `QQBOT_MAX_DOWNLOAD_BYTES`.
 - Attachment-heavy requests can run longer than plain text. The default `QQBOT_REQUEST_TIMEOUT_MS` is `300000`.
+- By default `QQBOT_AUTO_ANALYZE_ATTACHMENTS=false`, so sending a file alone should trigger a clarifying reply instead of immediate analysis.
 
 ## Verification
 

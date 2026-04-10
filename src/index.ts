@@ -9,13 +9,24 @@ import { QQAttachmentService } from "./qq/attachments.js";
 import { QQGatewayBridge } from "./qq/gateway.js";
 import { createLogger } from "./utils/logger.js";
 
-function buildSystemPrompt(customPrompt?: string): string {
-  const platformPrompt = [
+function buildSystemPrompt(
+  customPrompt: string | undefined,
+  autoAnalyzeAttachments: boolean,
+): string {
+  const platformPromptParts = [
     "You are replying inside QQ Official Bot chats.",
     "Prefer plain text unless rich media would clearly help.",
     "If you need to send an image, use Markdown image syntax like ![alt](https://...).",
     "If you need to send voice, video, or file media, use [qq:voice](url), [qq:video](url), or [qq:file filename.ext](url).",
-  ].join(" ");
+  ];
+  if (!autoAnalyzeAttachments) {
+    platformPromptParts.push(
+      "When a QQ attachment or local_path is provided, treat it as an available resource only.",
+      "Do not open, inspect, or analyze attachments unless the user explicitly asks you to do so.",
+      "If the user only sends an attachment without a clear request, ask a short clarifying question first.",
+    );
+  }
+  const platformPrompt = platformPromptParts.join(" ");
   return customPrompt ? `${customPrompt}\n\n${platformPrompt}` : platformPrompt;
 }
 
@@ -58,7 +69,10 @@ async function runServe(config: ReturnType<typeof loadConfig>): Promise<void> {
     baseUrl: config.hermes.baseUrl,
     apiKey: config.hermes.apiKey,
     model: config.hermes.model,
-    systemPrompt: buildSystemPrompt(config.hermes.systemPrompt),
+    systemPrompt: buildSystemPrompt(
+      config.hermes.systemPrompt,
+      config.qq.autoAnalyzeAttachments,
+    ),
     requestTimeoutMs: config.hermes.requestTimeoutMs,
     logger: logger.child("hermes"),
   });

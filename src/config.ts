@@ -30,6 +30,7 @@ export interface GatewayConfig {
     dedupeTtlMs: number;
     dataDir: string;
     downloadAttachments: boolean;
+    autoAnalyzeAttachments: boolean;
     maxDownloadBytes: number;
     accounts: QQAccountConfig[];
   };
@@ -225,6 +226,7 @@ export function loadConfig(
       dedupeTtlMs: readNumber(env, "QQBOT_DEDUPE_TTL_MS", 600_000, 1_000),
       dataDir: path.resolve(env.QQBOT_DATA_DIR?.trim() || ".data"),
       downloadAttachments: readBoolean(env, "QQBOT_DOWNLOAD_ATTACHMENTS", true),
+      autoAnalyzeAttachments: readBoolean(env, "QQBOT_AUTO_ANALYZE_ATTACHMENTS", false),
       maxDownloadBytes: readNumber(env, "QQBOT_MAX_DOWNLOAD_BYTES", 20 * 1024 * 1024, 1_024),
       accounts: loadAccounts(env, defaultAccountFlags),
     },

@@ -7,6 +7,7 @@ import { ExpiringSet, SerialTaskQueue } from "../utils/queue.js";
 import { QQApiClient } from "./api.js";
 import { QQAttachmentService } from "./attachments.js";
 import { handleBuiltinCommand } from "./commands.js";
+import { composeHermesInput } from "./inbound.js";
 import {
   normalizeC2CEvent,
   normalizeGroupEvent,
@@ -365,7 +366,11 @@ export class QQGatewayBridge {
         message.messageId,
         message.attachments,
       );
-      const hermesInput = [message.text, attachmentPrompt].filter(Boolean).join("\n\n");
+      const hermesInput = composeHermesInput({
+        messageText: message.text,
+        attachmentPrompt,
+        autoAnalyzeAttachments: this.config.qq.autoAnalyzeAttachments,
+      });
 
       const reply = await this.hermes.respond(message.conversationId, hermesInput);
       await this.qq.sendReply(message.target, reply.text);
