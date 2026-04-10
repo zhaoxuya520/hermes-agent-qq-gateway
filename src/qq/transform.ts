@@ -26,7 +26,7 @@ export function normalizeC2CEvent(
   options: NormalizeOptions,
 ): NormalizedInboundMessage | null {
   const text = stripQQMentions(event.content);
-  if (!text) {
+  if (!text && (!event.attachments || event.attachments.length === 0)) {
     return null;
   }
   return {
@@ -56,7 +56,7 @@ export function normalizeGroupEvent(
   options: NormalizeOptions,
 ): NormalizedInboundMessage | null {
   const text = stripQQMentions(event.content);
-  if (!text) {
+  if (!text && (!event.attachments || event.attachments.length === 0)) {
     return null;
   }
   return {
@@ -86,7 +86,7 @@ export function normalizeGuildAtEvent(
   options: NormalizeOptions,
 ): NormalizedInboundMessage | null {
   const text = stripQQMentions(event.content);
-  if (!text) {
+  if (!text && (!event.attachments || event.attachments.length === 0)) {
     return null;
   }
   return {
@@ -117,7 +117,7 @@ export function normalizeGuildDmEvent(
   options: NormalizeOptions,
 ): NormalizedInboundMessage | null {
   const text = stripQQMentions(event.content);
-  if (!text) {
+  if (!text && (!event.attachments || event.attachments.length === 0)) {
     return null;
   }
   return {

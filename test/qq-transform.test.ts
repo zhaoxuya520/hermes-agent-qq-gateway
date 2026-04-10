@@ -38,6 +38,33 @@ test("normalizeC2CEvent strips qq mentions and keeps attachments", () => {
   assert.equal(message?.attachments?.[0]?.filename, "test.png");
 });
 
+test("normalizeC2CEvent keeps attachment-only messages", () => {
+  const message = normalizeC2CEvent(
+    {
+      id: "m2",
+      content: "",
+      timestamp: "2026-04-10T00:00:00Z",
+      author: {
+        id: "1",
+        union_openid: "u1",
+        user_openid: "openid-1",
+      },
+      attachments: [
+        {
+          content_type: "image/png",
+          filename: "only-image.png",
+          url: "https://example.com/only-image.png",
+        },
+      ],
+    },
+    { accountId: "bot-a", conversationPrefix: "qqbot" },
+  );
+
+  assert.ok(message);
+  assert.equal(message?.text, "");
+  assert.equal(message?.attachments?.length, 1);
+});
+
 test("splitOutgoingText keeps chunks within limit", () => {
   const chunks = splitOutgoingText("12345 67890 12345", 6);
   assert.deepEqual(chunks, ["12345", "67890", "12345"]);
