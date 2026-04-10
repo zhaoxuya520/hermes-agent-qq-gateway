@@ -1,9 +1,11 @@
-import type { GatewayConfig } from "../config.js";
+import path from "node:path";
+import type { GatewayConfig, QQAccountConfig } from "../config.js";
 import type { Logger } from "../utils/logger.js";
 import { parseOutgoingReply } from "./outbound.js";
 import { splitOutgoingText } from "./transform.js";
 import type {
   QQGatewayInfo,
+  QQMediaItem,
   QQMessageResponse,
   QQTarget,
   QQTokenResponse,
@@ -18,6 +20,9 @@ interface TokenCache {
 
 enum MediaFileType {
   IMAGE = 1,
+  VIDEO = 2,
+  VOICE = 3,
+  FILE = 4,
 }
 
 interface UploadMediaResponse {
@@ -26,13 +31,35 @@ interface UploadMediaResponse {
   ttl: number;
 }
 
+function basenameFromUrl(url: string): string | undefined {
+  try {
+    const parsed = new URL(url);
+    const name = path.basename(parsed.pathname);
+    return name && name !== "/" ? name : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function buildProactiveTextBody(text: string): Record<string, unknown> {
+  return {
+    content: text,
+    msg_type: 0,
+  };
+}
+
 export class QQApiClient {
   private tokenCache?: TokenCache;
 
   constructor(
-    private readonly config: GatewayConfig["qq"],
+    private readonly platformConfig: GatewayConfig["qq"],
+    readonly account: QQAccountConfig,
     private readonly logger: Logger,
   ) {}
+
+  get accountId(): string {
+    return this.account.id;
+  }
 
   async getGatewayUrl(): Promise<string> {
     const accessToken = await this.getAccessToken();
@@ -41,21 +68,42 @@ export class QQApiClient {
   }
 
   async sendReply(target: QQTarget, text: string): Promise<void> {
-    const supportsImage = target.kind === "c2c" || target.kind === "group";
-    const parsed = supportsImage ? parseOutgoingReply(text) : { text, imageUrls: [] };
-
-    const chunks = splitOutgoingText(parsed.text, this.config.textChunkLimit);
+    const parsed = parseOutgoingReply(text);
+    const chunks = splitOutgoingText(parsed.text, this.platformConfig.textChunkLimit);
     for (const chunk of chunks) {
       await this.sendTextChunk(target, chunk);
     }
 
-    for (const imageUrl of parsed.imageUrls) {
-      await this.sendImage(target, imageUrl);
+    for (const media of parsed.media) {
+      await this.sendMedia(target, media);
+    }
+  }
+
+  async sendProactive(kind: "c2c" | "group", to: string, text: string): Promise<void> {
+    const parsed = parseOutgoingReply(text);
+    const target: QQTarget =
+      kind === "c2c"
+        ? {
+            kind: "c2c",
+            openid: to,
+          }
+        : {
+            kind: "group",
+            groupOpenid: to,
+          };
+
+    const chunks = splitOutgoingText(parsed.text, this.platformConfig.textChunkLimit);
+    for (const chunk of chunks) {
+      await this.sendTextChunk(target, chunk);
+    }
+
+    for (const media of parsed.media) {
+      await this.sendMedia(target, media);
     }
   }
 
   async sendTyping(target: QQTarget): Promise<void> {
-    if (target.kind !== "c2c") {
+    if (target.kind !== "c2c" || !target.replyToMessageId) {
       return;
     }
     const accessToken = await this.getAccessToken();
@@ -85,15 +133,15 @@ export class QQApiClient {
       return this.tokenCache.token;
     }
 
-    const response = await fetch(this.config.tokenUrl, {
+    const response = await fetch(this.platformConfig.tokenUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "User-Agent": USER_AGENT,
       },
       body: JSON.stringify({
-        appId: this.config.appId,
-        clientSecret: this.config.clientSecret,
+        appId: this.account.appId,
+        clientSecret: this.account.clientSecret,
       }),
     });
 
@@ -119,34 +167,33 @@ export class QQApiClient {
     this.tokenCache = undefined;
   }
 
-  private async sendImage(
-    target: QQTarget,
-    imageUrl: string,
-  ): Promise<QQMessageResponse | void> {
-    const accessToken = await this.getAccessToken();
-    switch (target.kind) {
-      case "c2c": {
-        const upload = await this.uploadC2CMedia(accessToken, target.openid, imageUrl);
-        return this.request(accessToken, "POST", `/v2/users/${target.openid}/messages`, {
-          msg_type: 7,
-          media: { file_info: upload.file_info },
-          msg_id: target.replyToMessageId,
-          msg_seq: this.nextSequence(),
-        });
-      }
-      case "group": {
-        const upload = await this.uploadGroupMedia(accessToken, target.groupOpenid, imageUrl);
-        return this.request(accessToken, "POST", `/v2/groups/${target.groupOpenid}/messages`, {
-          msg_type: 7,
-          media: { file_info: upload.file_info },
-          msg_id: target.replyToMessageId,
-          msg_seq: this.nextSequence(),
-        });
-      }
-      case "guild":
-      case "dm":
-        return this.sendTextChunk(target, imageUrl);
+  private async sendMedia(target: QQTarget, media: QQMediaItem): Promise<QQMessageResponse | void> {
+    if (target.kind === "guild" || target.kind === "dm") {
+      return this.sendTextChunk(target, media.url);
     }
+
+    const accessToken = await this.getAccessToken();
+    const uploadPath =
+      target.kind === "c2c"
+        ? `/v2/users/${target.openid}/files`
+        : `/v2/groups/${target.groupOpenid}/files`;
+    const upload = await this.uploadMedia(accessToken, uploadPath, media);
+    const messagePath =
+      target.kind === "c2c"
+        ? `/v2/users/${target.openid}/messages`
+        : `/v2/groups/${target.groupOpenid}/messages`;
+
+    const body: Record<string, unknown> = {
+      msg_type: 7,
+      media: { file_info: upload.file_info },
+    };
+
+    if (target.replyToMessageId) {
+      body.msg_id = target.replyToMessageId;
+      body.msg_seq = this.nextSequence();
+    }
+
+    return this.request(accessToken, "POST", messagePath, body);
   }
 
   private async sendTextChunk(target: QQTarget, text: string): Promise<QQMessageResponse> {
@@ -155,78 +202,86 @@ export class QQApiClient {
     switch (target.kind) {
       case "c2c":
         return this.request(accessToken, "POST", `/v2/users/${target.openid}/messages`, {
-          content: text,
-          msg_type: 0,
-          msg_id: target.replyToMessageId,
-          msg_seq: this.nextSequence(),
+          ...(target.replyToMessageId
+            ? {
+                content: text,
+                msg_type: 0,
+                msg_id: target.replyToMessageId,
+                msg_seq: this.nextSequence(),
+              }
+            : buildProactiveTextBody(text)),
         });
       case "group":
         return this.request(accessToken, "POST", `/v2/groups/${target.groupOpenid}/messages`, {
-          content: text,
-          msg_type: 0,
-          msg_id: target.replyToMessageId,
-          msg_seq: this.nextSequence(),
+          ...(target.replyToMessageId
+            ? {
+                content: text,
+                msg_type: 0,
+                msg_id: target.replyToMessageId,
+                msg_seq: this.nextSequence(),
+              }
+            : buildProactiveTextBody(text)),
         });
       case "guild":
         return this.request(accessToken, "POST", `/channels/${target.channelId}/messages`, {
           content: text,
-          msg_id: target.replyToMessageId,
+          ...(target.replyToMessageId ? { msg_id: target.replyToMessageId } : {}),
         });
       case "dm":
         return this.request(accessToken, "POST", `/dms/${target.guildId}/messages`, {
           content: text,
-          msg_id: target.replyToMessageId,
+          ...(target.replyToMessageId ? { msg_id: target.replyToMessageId } : {}),
         });
     }
   }
 
-  private async uploadC2CMedia(
-    accessToken: string,
-    openid: string,
-    imageUrl: string,
-  ): Promise<UploadMediaResponse> {
-    return this.uploadMedia(accessToken, `/v2/users/${openid}/files`, imageUrl);
-  }
-
-  private async uploadGroupMedia(
-    accessToken: string,
-    groupOpenid: string,
-    imageUrl: string,
-  ): Promise<UploadMediaResponse> {
-    return this.uploadMedia(accessToken, `/v2/groups/${groupOpenid}/files`, imageUrl);
-  }
-
   private async uploadMedia(
     accessToken: string,
-    path: string,
-    imageUrl: string,
+    pathName: string,
+    media: QQMediaItem,
   ): Promise<UploadMediaResponse> {
-    if (imageUrl.startsWith("data:")) {
-      const match = imageUrl.match(/^data:([^;]+);base64,(.+)$/);
+    const body: Record<string, unknown> = {
+      file_type: this.mediaFileType(media.type),
+      srv_send_msg: false,
+    };
+
+    if (media.url.startsWith("data:")) {
+      const match = media.url.match(/^data:([^;]+);base64,(.+)$/);
       if (!match) {
-        throw new Error("Invalid base64 image data URL");
+        throw new Error(`Invalid base64 data URL for ${media.type}`);
       }
-      return this.request(accessToken, "POST", path, {
-        file_type: MediaFileType.IMAGE,
-        file_data: match[2],
-        srv_send_msg: false,
-      });
+      body.file_data = match[2];
+    } else {
+      body.url = media.url;
     }
 
-    return this.request(accessToken, "POST", path, {
-      file_type: MediaFileType.IMAGE,
-      url: imageUrl,
-      srv_send_msg: false,
-    });
+    if (media.type === "file") {
+      body.file_name = media.fileName ?? basenameFromUrl(media.url) ?? "attachment.bin";
+    }
+
+    return this.request(accessToken, "POST", pathName, body);
+  }
+
+  private mediaFileType(type: QQMediaItem["type"]): MediaFileType {
+    switch (type) {
+      case "image":
+        return MediaFileType.IMAGE;
+      case "voice":
+        return MediaFileType.VOICE;
+      case "video":
+        return MediaFileType.VIDEO;
+      case "file":
+        return MediaFileType.FILE;
+    }
   }
 
   private async request<T>(
     accessToken: string,
     method: string,
-    path: string,
+    pathName: string,
     body?: unknown,
   ): Promise<T> {
-    const url = `${this.config.apiBase}${path}`;
+    const url = `${this.platformConfig.apiBase}${pathName}`;
     const response = await fetch(url, {
       method,
       headers: {
@@ -243,7 +298,7 @@ export class QQApiClient {
       this.tokenCache = undefined;
     }
     if (!response.ok) {
-      throw new Error(`QQ API ${response.status} ${path}: ${raw}`);
+      throw new Error(`QQ API ${response.status} ${pathName}: ${raw}`);
     }
     return JSON.parse(raw) as T;
   }

@@ -79,25 +79,26 @@ export type QQTarget =
   | {
       kind: "c2c";
       openid: string;
-      replyToMessageId: string;
+      replyToMessageId?: string;
     }
   | {
       kind: "group";
       groupOpenid: string;
-      replyToMessageId: string;
+      replyToMessageId?: string;
     }
   | {
       kind: "guild";
       channelId: string;
-      replyToMessageId: string;
+      replyToMessageId?: string;
     }
   | {
       kind: "dm";
       guildId: string;
-      replyToMessageId: string;
+      replyToMessageId?: string;
     };
 
 export interface NormalizedInboundMessage {
+  accountId: string;
   kind: QQTarget["kind"];
   conversationId: string;
   messageId: string;
@@ -106,4 +107,15 @@ export interface NormalizedInboundMessage {
   text: string;
   target: QQTarget;
   rawText: string;
+  attachments?: QQMessageAttachment[];
+}
+
+export type QQKnownUserKind = NormalizedInboundMessage["kind"];
+
+export type QQMediaType = "image" | "voice" | "video" | "file";
+
+export interface QQMediaItem {
+  type: QQMediaType;
+  url: string;
+  fileName?: string;
 }

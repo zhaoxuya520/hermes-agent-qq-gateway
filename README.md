@@ -1,36 +1,66 @@
 # hermes-agent-qq-gateway
 
-一个独立的 Node.js 网关，把 QQ 官方 Bot API 接到 Hermes Agent 的 OpenAI 兼容 API Server 上。
+A standalone Node.js gateway that connects QQ Official Bot to Hermes Agent through the Hermes OpenAI-compatible API server.
 
-当前这版的目标是稳定接入，而不是一次把所有媒体能力做满。
+## What it does
 
-## 当前支持
+- Receives QQ Official Bot events over the QQ gateway websocket
+- Supports C2C, group @mentions, guild @mentions, and guild direct messages
+- Sends the message into Hermes through `/v1/responses`
+- Preserves conversation context with Hermes `conversation`
+- Replies back to QQ with text and supported media
 
-- QQ C2C 私聊
-- QQ 群聊 `@机器人`
-- QQ 频道 `@机器人`
-- QQ 频道私信
-- Hermes 回复中的 Markdown 图片和独立图片 URL 自动转 QQ 图片消息
-- 自动重连
-- 消息去重
-- 按会话串行调用 Hermes，避免上下文乱序
-- 使用 Hermes `/v1/responses` 的 `conversation` 模式保留上下文
+## Current feature set
 
-## 当前限制
+- Multi-account support
+- Session resume persistence across restarts
+- Known-user persistence
+- Built-in commands
+- Proactive send CLI
+- Attachment download and local cache for inbound files
+- Outbound image, voice, video, and file tags for QQ C2C and group chats
+- Docker and PM2 deployment files
 
-- 入站附件会作为文本摘要附加给 Hermes，而不是自动下载成可直接分析的本地文件
-- 出站图片目前优先支持 `C2C` 和 `群聊`，频道与频道私信暂时退化为发送链接
-- 出站语音、文件、视频暂未实现
+## Built-in commands
 
-## 依赖
+- `/bot-help`
+- `/bot-ping`
+- `/bot-version`
+- `/bot-status`
+- `/bot-users [c2c|group|guild|dm]`
+- `/bot-send <c2c|group> <target> <message>`
+- `/bot-broadcast <c2c|group> <message>`
 
-- Node.js 20+
-- 一个已创建好的 QQ 官方机器人
-- 一个已启动的 Hermes API Server
+## Hermes output conventions
 
-## Hermes 侧准备
+Use these formats when you want Hermes to send media:
 
-根据 Hermes 官方文档，先启用 API Server：
+```md
+![image alt](https://example.com/cat.png)
+[qq:voice](https://example.com/voice.mp3)
+[qq:video](https://example.com/demo.mp4)
+[qq:file report.pdf](https://example.com/report.pdf)
+```
+
+Standalone image URLs on their own line also become QQ image messages.
+
+## Inbound attachments
+
+When QQ attachments are present, the gateway can download them into the local data directory and append a prompt section like:
+
+```text
+[QQ attachments]
+- photo.png | image/png | https://...
+  local_path: /path/to/file
+```
+
+This gives Hermes a stable local path it can refer to in tool-enabled workflows.
+
+## Quick start
+
+### 1. Enable the Hermes API server
+
+Example:
 
 ```bash
 API_SERVER_ENABLED=true
@@ -38,68 +68,90 @@ API_SERVER_KEY=change-me-local-dev
 hermes gateway
 ```
 
-默认服务地址是 `http://127.0.0.1:8642/v1`。
+### 2. Configure the gateway
 
-## 环境变量
+Copy the example file and edit it:
 
-复制 `.env.example` 后按需填写：
+```bash
+cp .env.example .env
+```
+
+Single-account mode:
 
 ```bash
 QQBOT_APP_ID=your_app_id
 QQBOT_CLIENT_SECRET=your_client_secret
-
-HERMES_BASE_URL=http://127.0.0.1:8642/v1
 HERMES_API_KEY=change-me-local-dev
-HERMES_MODEL=hermes-agent
 ```
 
-常用可选项：
+Multi-account mode:
 
-- `QQBOT_ENABLE_C2C=true`
-- `QQBOT_ENABLE_GROUP_AT=true`
-- `QQBOT_ENABLE_GUILD_AT=true`
-- `QQBOT_ENABLE_GUILD_DM=true`
-- `QQBOT_TEXT_CHUNK_LIMIT=4500`
-- `HERMES_CONVERSATION_PREFIX=qqbot`
-- `HERMES_SYSTEM_PROMPT=...`
-- `LOG_LEVEL=info`
+```bash
+QQBOT_ACCOUNTS_JSON=[{"id":"default","name":"Default","appId":"111","clientSecret":"secret-1"},{"id":"ops","name":"Ops","appId":"222","clientSecret":"secret-2","allowFrom":["openid_a","openid_b"]}]
+```
 
-## 本地运行
+### 3. Run it
 
 ```bash
 npm install
 npm run build
-node --env-file=.env dist/index.js
+node --env-file=.env dist/index.js serve
 ```
 
-开发模式：
+Development mode:
 
 ```bash
 npm run dev
 ```
 
-## 回复图片的约定
+## CLI commands
 
-如果 Hermes 输出里包含下面任一种内容，网关会尝试发 QQ 图片消息：
+Start the bridge:
 
-```md
-![cat](https://example.com/cat.png)
+```bash
+node --env-file=.env dist/index.js serve
 ```
 
-或单独一行图片 URL：
+Send a proactive message:
 
-```text
-https://example.com/cat.png
+```bash
+node --env-file=.env dist/index.js send --account default --type c2c --to OPENID --message "hello from gateway"
 ```
 
-也支持 `data:image/...;base64,...` 形式。
+List known users:
 
-## 服务器部署
+```bash
+node --env-file=.env dist/index.js known-users --account default
+```
+
+## Environment variables
+
+Core variables:
+
+- `QQBOT_APP_ID`
+- `QQBOT_CLIENT_SECRET`
+- `QQBOT_ACCOUNTS_JSON`
+- `HERMES_BASE_URL`
+- `HERMES_API_KEY`
+- `HERMES_MODEL`
+- `HERMES_CONVERSATION_PREFIX`
+
+Runtime and storage:
+
+- `QQBOT_TEXT_CHUNK_LIMIT`
+- `QQBOT_DEDUPE_TTL_MS`
+- `QQBOT_REQUEST_TIMEOUT_MS`
+- `QQBOT_DATA_DIR`
+- `QQBOT_DOWNLOAD_ATTACHMENTS`
+- `QQBOT_MAX_DOWNLOAD_BYTES`
+- `QQBOT_ALLOW_FROM`
+- `LOG_LEVEL`
+
+## Deployment
 
 ### Docker Compose
 
 ```bash
-cp .env.example .env
 docker compose up -d --build
 ```
 
@@ -111,22 +163,18 @@ npm run build
 pm2 start ecosystem.config.cjs
 ```
 
-## 发布到 npm 前建议
+## Notes
 
-- 把 `package.json` 里的 `name` 改成你自己的包名或 scope
-- 选择正式 license
-- 补上 README 里的部署拓扑和媒体能力说明
-- 如果你准备支持图片/语音，建议下一步补：
-  - 入站图片下载与缓存
-  - 语音上传与转码
-  - 文件和视频消息
+- QQ proactive delivery may still be limited by QQ platform policy if the target has not interacted recently.
+- Rich media delivery is best on C2C and group chats. Guild channels and guild DMs fall back to plain URLs for unsupported media.
+- Attachment downloads are capped by `QQBOT_MAX_DOWNLOAD_BYTES`.
 
-## 大致架构
+## Verification
 
-```text
-QQ Official Bot Gateway
-  -> WebSocket events
-  -> normalize message
-  -> Hermes /v1/responses
-  -> send QQ reply
+This repository is verified with:
+
+```bash
+npm run typecheck
+npm test
+npm run build
 ```

@@ -9,12 +9,12 @@ test("extractAssistantText joins assistant output_text parts", () => {
         type: "message",
         role: "assistant",
         content: [
-          { type: "output_text", text: "第一段" },
-          { type: "output_text", text: "第二段" },
+          { type: "output_text", text: "part one" },
+          { type: "output_text", text: "part two" },
         ],
       },
     ],
   });
 
-  assert.equal(text, "第一段\n\n第二段");
+  assert.equal(text, "part one\n\npart two");
 });
