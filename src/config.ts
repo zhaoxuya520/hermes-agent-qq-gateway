@@ -216,7 +216,7 @@ export function loadConfig(
       model: env.HERMES_MODEL?.trim() || "hermes-agent",
       systemPrompt: readOptional(env, "HERMES_SYSTEM_PROMPT"),
       conversationPrefix: env.HERMES_CONVERSATION_PREFIX?.trim() || "qqbot",
-      requestTimeoutMs: readNumber(env, "QQBOT_REQUEST_TIMEOUT_MS", 120_000, 1_000),
+      requestTimeoutMs: readNumber(env, "QQBOT_REQUEST_TIMEOUT_MS", 300_000, 1_000),
     },
     qq: {
       apiBase: env.QQBOT_API_BASE?.trim() || "https://api.sgroup.qq.com",

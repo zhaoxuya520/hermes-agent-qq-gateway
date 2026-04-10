@@ -168,6 +168,7 @@ pm2 start ecosystem.config.cjs
 - QQ proactive delivery may still be limited by QQ platform policy if the target has not interacted recently.
 - Rich media delivery is best on C2C and group chats. Guild channels and guild DMs fall back to plain URLs for unsupported media.
 - Attachment downloads are capped by `QQBOT_MAX_DOWNLOAD_BYTES`.
+- Attachment-heavy requests can run longer than plain text. The default `QQBOT_REQUEST_TIMEOUT_MS` is `300000`.
 
 ## Verification
 
