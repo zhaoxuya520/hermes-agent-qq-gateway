@@ -1,0 +1,9 @@
+services:
+  hermes-qq-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hermes-qq-gateway
+    restart: unless-stopped
+    env_file:
+      - .env

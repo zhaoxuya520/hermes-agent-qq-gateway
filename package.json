@@ -1,0 +1,52 @@
+{
+  "name": "hermes-agent-qq-gateway",
+  "version": "0.1.0",
+  "description": "A standalone QQ Official Bot gateway for Hermes Agent",
+  "type": "module",
+  "main": "dist/index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zhaoxuya520/hermes-agent-qq-gateway.git"
+  },
+  "homepage": "https://github.com/zhaoxuya520/hermes-agent-qq-gateway#readme",
+  "bugs": {
+    "url": "https://github.com/zhaoxuya520/hermes-agent-qq-gateway/issues"
+  },
+  "bin": {
+    "hermes-qq-gateway": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    ".env.example"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "test": "node --import tsx --test ./test/*.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "hermes-agent",
+    "qq",
+    "qq-bot",
+    "gateway",
+    "bot"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
